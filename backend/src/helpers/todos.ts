@@ -8,11 +8,14 @@ import * as uuid from 'uuid'
 
 const acessobj = new TodosAccess()
 const logger = createLogger("Todos")
+const s3_bucket = process.env.ATTACHMENT_S3_BUCKET
 
 export async function createTodo(userId: string, newTodo: CreateTodoRequest): Promise<TodoItem> {
+  const todoId = uuid.v4()
   const todo = {
-    todoId: uuid.v4(),
+    todoId: todoId,
     userId: userId,
+    attachmentUrl: `https://${s3_bucket}.s3.amazonaws.com/${todoId}`,
     ...newTodo
   }
 
@@ -21,7 +24,8 @@ export async function createTodo(userId: string, newTodo: CreateTodoRequest): Pr
   return newItem
 }
 
-export async function getTodos(userId: string): Promise<TodoItem[]> {
+export async function getTodos(userId: string): Promise<any> {
+  logger.info("Getting Todos", userId)
   return acessobj.getTodo(userId);
 }
 
@@ -36,17 +40,10 @@ export async function updateTodo(todoId: String, updatedTodo: UpdateTodoRequest,
 }
 
 export async function deleteTodo(todoId: string, userId: string): Promise<void> {
-  logger.debug('deleting a todo: ${todoId}')
+  logger.info('deleting a todo', todoId)
   acessobj.deleteTodo(todoId, userId)
 }
 
-export async function getPresignedUrlForTodo(todoId: String, userId: String): Promise<string> {
-  const attachmentUrl = getPresignedUrl(todoId)
-  const todo = {
-    todoId: todoId,
-    userId: userId,
-    attachmentUrl: attachmentUrl
-  }
-
-  return await acessobj.updateTodoUrl(todo as TodoItem)
+export function getPresignedUrlForTodo(todoId: String): string {
+  return getPresignedUrl(todoId)
 }

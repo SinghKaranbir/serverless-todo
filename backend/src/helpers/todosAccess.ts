@@ -1,15 +1,15 @@
 import * as AWS from 'aws-sdk'
-import * as AWSXRay from 'aws-xray-sdk'
 import { DocumentClient } from 'aws-sdk/clients/dynamodb'
 import { createLogger } from '../utils/logger'
 import { TodoItem } from '../models/TodoItem'
 
+const AWSXRay = require('aws-xray-sdk')
+const XAWS = AWSXRay.captureAWS(AWS)
+
 export class TodosAccess {
     constructor(
-        private readonly XAWS = AWSXRay.captureAWS(AWS),
-        private readonly docClient: AWS.DynamoDB.DocumentClient = new XAWS.DynamoDB.DocumentClient(),
+        private readonly docClient: DocumentClient = new XAWS.DynamoDB.DocumentClient(),
         private readonly todosTable = process.env.TODOS_TABLE,
-        private readonly createdAtIndex = process.env.TODOS_CREATED_AT_INDEX
         private logger = createLogger('TodosAccess')
     ) { }
 
@@ -23,17 +23,19 @@ export class TodosAccess {
         return todoItem
     }
 
-    async getTodo(userId: string): Promise<TodoItem[]> {
+    async getTodo(userId: string): Promise<any> {
         const result = await this.docClient.query({
             TableName: this.todosTable,
-            IndexName: this.createdAtIndex,
-            KeyConditionExpression: 'userId = :userId',
+            KeyConditionExpression: "#userId = :userId",
+            ExpressionAttributeNames: {
+                "#userId": "userId"
+            },
             ExpressionAttributeValues: {
-                ':userId': userId
+                ":userId": userId
             }
         }).promise()
 
-        return result.Items as TodoItem[]
+        return result.Items
     }
 
     async updateTodo(updatedTodo: TodoItem): Promise<void> {
@@ -45,7 +47,7 @@ export class TodosAccess {
             },
             UpdateExpression: 'set #namefield = :n, dueDate = :d, done = :done',
             ExpressionAttributeValues: {
-                ':n': updateTodo.name,
+                ':n': updatedTodo.name,
                 ':d': updatedTodo.dueDate,
                 ':done': updatedTodo.done
             },
@@ -55,24 +57,6 @@ export class TodosAccess {
         }).promise()
     }
 
-    async updateTodoUrl(updatedTodo: TodoItem): Promise<string> {
-        await this.docClient.update({
-            TableName: this.todosTable,
-            Key: {
-                todoId: updatedTodo.todoId,
-                userId: updatedTodo.userId
-            },
-            ExpressionAttributeNames: { "#A": "attachmentUrl" },
-            UpdateExpression: "set #A = :attachmentUrl",
-            ExpressionAttributeValues: {
-                ":attachmentUrl": updatedTodo.attachmentUrl,
-            },
-            ReturnValues: "UPDATED_NEW"
-        }).promise()
-
-        return updatedTodo.attachmentUrl
-    }
-
     async deleteTodo(todoId: string, userId: string): Promise<void> {
         try {
             await this.docClient.delete({
@@ -80,9 +64,9 @@ export class TodosAccess {
                 Key: { todoId, userId }
             }).promise()
 
-            logger.debug('Todo item deleted')
+            this.logger.debug('Todo item deleted')
         } catch (error) {
-            logger.error(error)
+            this.logger.error(error)
         }
     }
 }
